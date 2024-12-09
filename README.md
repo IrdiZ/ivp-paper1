@@ -4,7 +4,7 @@ This repository contains Python code to generate RGB-depth images using stereo v
 
 ## Files Overview
 
-### 1. **disparity_map_generator.py**
+### 1. **dataSetRunner.py**
 
 This script implements the **StereoSGBM** algorithm for generating disparity maps from stereo image pairs. It reads two input images (left and right) in grayscale, calculates the disparity map using various parameters, and visualizes the results.
 
