@@ -54,7 +54,7 @@ The ground truth is `disp0.pfm`, in pixels. MAE is the mean absolute difference 
 - The ground truth is finite and greater than 0.
 - SGBM found a match (disparity greater than 0).
 
-Run time covers the SGBM call and the image write. This repository has no published results. Run the scripts on your own copy of the dataset to get numbers.
+Run time covers the SGBM call, the image write and the MAE step. This repository has no published results. Run the scripts on your own copy of the dataset to get numbers.
 
 ## License
 
