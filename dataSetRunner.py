@@ -2,21 +2,36 @@ import numpy as np
 import cv2
 import os
 import time
-import imageio
-from sklearn.metrics import mean_absolute_error
+import argparse
 import pandas as pd
 
 def read_pfm(file):
     """
-    Read PFM ground truth files.
+    Read a PFM ground truth file as a float32 array (values in pixels).
     """
-    return imageio.imread(file)
+    with open(file, 'rb') as f:
+        header = f.readline().decode('ascii').strip()
+        if header not in ('Pf', 'PF'):
+            raise ValueError(f"{file} is not a PFM file")
+        channels = 3 if header == 'PF' else 1
+        width, height = map(int, f.readline().decode('ascii').split())
+        scale = float(f.readline().decode('ascii').strip())
+        dtype = '<f4' if scale < 0 else '>f4'
+        data = np.fromfile(f, dtype=dtype, count=width * height * channels)
+    shape = (height, width, channels) if channels == 3 else (height, width)
+    # PFM stores rows from bottom to top, so flip to the usual top-to-bottom order.
+    return np.flipud(data.reshape(shape)).astype(np.float32)
 
 def compute_mae(disparity_map, ground_truth):
     """
     Compute Mean Absolute Error between disparity map and ground truth.
     """
-    return np.mean(np.abs(disparity_map - ground_truth))
+    # Both inputs must be float32 disparities in pixels. Only compare pixels
+    # where both the ground truth and the SGBM result are valid.
+    valid = np.isfinite(ground_truth) & (ground_truth > 0) & (disparity_map > 0)
+    if not valid.any():
+        return float('nan')
+    return float(np.mean(np.abs(disparity_map[valid] - ground_truth[valid])))
 
 def read_calib(calib_path):
     """
@@ -49,25 +64,6 @@ def read_calib(calib_path):
     
     return calib_data
 
-    """
-    Read and parse the calibration data from the text file for each dataset folder.
-    """
-    calib_data = {}
-    with open(calib_path, 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            if line.startswith('cam0'):
-                calib_data['cam0'] = np.array([list(map(float, item.split())) for item in line.split('=')[1].strip().split(';')])
-            elif line.startswith('cam1'):
-                calib_data['cam1'] = np.array([list(map(float, item.split())) for item in line.split('=')[1].strip().split(';')])
-            elif line.startswith('doffs'):
-                calib_data['doffs'] = float(line.split('=')[1].strip())
-            elif line.startswith('baseline'):
-                calib_data['baseline'] = float(line.split('=')[1].strip())
-            elif line.startswith('ndisp'):
-                calib_data['ndisp'] = int(line.split('=')[1].strip())
-    return calib_data
-
 def dataSetRunner(dataset_path):
     """
     Main function to process all datasets, test performance and accuracy.
@@ -79,7 +75,7 @@ def dataSetRunner(dataset_path):
     all_results = []  # List to store results for all datasets
     
     # Iterate through each folder
-    for folder in os.listdir(dataset_path):
+    for folder in sorted(os.listdir(dataset_path)):
         folder_path = os.path.join(dataset_path, folder, folder)
         print(f"\nProcessing dataset folder: {folder}")
         
@@ -117,16 +113,22 @@ def dataSetRunner(dataset_path):
                 # Compute disparity map using StereoSGBM
                 disp = stereo.compute(imgL, imgR).astype(np.float32)
 
-                # Normalize the disparity map for visualization
-                disp = cv2.normalize(disp, None, 0, 255, cv2.NORM_MINMAX)
-                disp = np.uint8(disp)
+                # StereoSGBM returns fixed-point values scaled by 16.
+                # Divide by 16 to get disparity in pixels, the same unit as the ground truth.
+                disp_px = disp / 16.0
+                # Pixels SGBM could not match are negative (-1 in fixed point). Mark them invalid.
+                disp_px[disp < 0] = 0
+
+                # Normalize a copy for visualization only. Never use it for MAE.
+                disp_vis = cv2.normalize(disp_px, None, 0, 255, cv2.NORM_MINMAX)
+                disp_vis = np.uint8(disp_vis)
 
                 # Save the disparity map
                 disparity_map_path = f"disparity_map_{folder}_block{block_size}_disparities{num_disparities}.png"
-                cv2.imwrite(disparity_map_path, disp)
+                cv2.imwrite(disparity_map_path, disp_vis)
 
-                # Compute MAE between the disparity map and the ground truth
-                mae = compute_mae(disp, ground_truth)
+                # Compute MAE between the disparity in pixels and the ground truth
+                mae = compute_mae(disp_px, ground_truth)
                 print(f"MAE: {mae:.4f}")
 
                 # Measure execution time
@@ -150,6 +152,8 @@ def dataSetRunner(dataset_path):
     return results_df
 
 if __name__ == "__main__":
-    dataset_path = r"C:\Users\Administrator\Desktop\M-2014-Dataset\imperfect-dSets"  # Replace with your dataset path
-    results = dataSetRunner(dataset_path)
+    parser = argparse.ArgumentParser(description="Run StereoSGBM on Middlebury 2014 scenes and write experiment_results.csv.")
+    parser.add_argument("dataset_dir", help="folder with one sub-folder per scene (scene/scene/im0.png, ...)")
+    args = parser.parse_args()
+    results = dataSetRunner(args.dataset_dir)
     print(results)
