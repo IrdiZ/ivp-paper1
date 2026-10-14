@@ -1,60 +1,63 @@
-# Generating RGB-Depth Images Using Stereo Vision
+# Stereo depth with OpenCV StereoSGBM
 
-This repository contains Python code to generate RGB-depth images using stereo vision techniques. The core algorithm used in this project is **StereoSGBM (Semi-Global Block Matching)**, which generates depth maps from stereo image pairs. The project demonstrates how adjusting key parameters can affect depth map accuracy and computational efficiency.
+Compute disparity maps from stereo image pairs with OpenCV StereoSGBM. Measure how block size and disparity range change the error and the run time.
 
-## Files Overview
+University course project (2024).
 
-### 1. **dataSetRunner.py**
+## What it does
 
-This script implements the **StereoSGBM** algorithm for generating disparity maps from stereo image pairs. It reads two input images (left and right) in grayscale, calculates the disparity map using various parameters, and visualizes the results.
+- `dataSetRunner.py` runs StereoSGBM on every scene in a Middlebury 2014 folder.
+- It tries 4 block sizes (3, 5, 7, 11) and 3 disparity ranges (128, 256, 512).
+- It saves one disparity image per setting, and writes MAE and run time per scene to `experiment_results.csv`.
+- `visualise-results.py` reads that CSV and makes charts: MAE against run time, average MAE per setting, and a heatmap.
 
-#### Features:
-- Reads and preprocesses stereo images (left and right).
-- Configurable parameters for block size, number of disparities, etc.
-- Generates a disparity map and visualizes the result with a color map.
-- Saves the generated disparity map as an image file.
+## Quick start
 
-#### How to use:
-1. Find the folder which contains all folders of all datasets you want to analyze.
-2. Folder[datasets...] and each dataset has a folder inside which contains the same name folder and also the format of middlebury 2014. (might need like 5 min to set up, I am too lazy to explain with precision)
-2. Run the script:
-   ```bash
-   python dataSetRunner.py
-3. The output will be csv of all datasets.
+Install the requirements:
 
-2. experiment_results_analyzer.py
-This script runs a series of experiments to evaluate the performance of the StereoSGBM algorithm, focusing on the trade-offs between accuracy (MAE) and execution time. It tests different configurations (block size and disparity range) and generates visualizations such as scatter plots, heatmaps, and bar charts to analyze the results.
+```bash
+pip install -r requirements.txt
+```
 
-Features:
-Reads ground truth disparity maps and computes the MAE (Mean Absolute Error).
-Measures the execution time for each experiment configuration.
-Visualizes the relationship between MAE and execution time.
-Provides insights into the best configurations for optimal accuracy and performance.
-How to use:
-Place your stereo image pairs and corresponding ground truth disparity maps in the appropriate directories.
+Download scenes from the [Middlebury Stereo 2014 dataset](https://vision.middlebury.edu/stereo/data/scenes2014/). Put them in one folder. Each scene folder must contain another folder with the same name:
 
-Run the script:
+```
+datasets/
+  Adirondack-imperfect/
+    Adirondack-imperfect/
+      calib.txt
+      im0.png
+      im1.png
+      disp0.pfm
+```
 
-python dataSetRunner.py
+Run the experiment, then the charts:
 
-The script will display charts and save the analysis results.
+```bash
+python dataSetRunner.py datasets
+python visualise-results.py
+```
 
-Requirements
-Python 3.x
-Required Python packages:
-numpy
-opencv-python
-matplotlib
-seaborn
-imageio
-scikit-learn
+The scripts write their output files (PNG images and CSV files) to the current folder.
 
-Dataset
-This project uses the Middlebury Stereo 2014 dataset for stereo image pairs and ground-truth disparity maps. The dataset can be downloaded from Middlebury Stereo 2014.
+## How it works
 
-License
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. Read the left image (`im0.png`) and right image (`im1.png`) in grayscale.
+2. For each setting, run `cv2.StereoSGBM_create` with the chosen `blockSize` and `numDisparities`. The other parameters stay fixed.
+3. Divide the SGBM output by 16. OpenCV returns disparity as fixed-point numbers scaled by 16.
+4. Save a normalized 0-255 copy for viewing. This copy is not used for the error.
 
-Acknowledgments
-StereoSGBM: OpenCV's implementation of the Semi-Global Block Matching algorithm.
-Middlebury Stereo Dataset: A benchmark dataset for evaluating stereo vision algorithms.
+## Evaluation
+
+The ground truth is `disp0.pfm`, in pixels. MAE is the mean absolute difference between the SGBM disparity (in pixels) and the ground truth. It uses only valid pixels:
+
+- The ground truth is finite and greater than 0.
+- SGBM found a match (disparity greater than 0).
+
+Run time covers the SGBM call and the image write. This repository has no published results. Run the scripts on your own copy of the dataset to get numbers.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+The dataset belongs to its authors. Cite the Middlebury 2014 paper if you use it: Scharstein et al., "High-resolution stereo datasets with subpixel-accurate ground truth", GCPR 2014.
